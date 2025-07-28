@@ -5,14 +5,14 @@ import numpy as np
 import tempfile
 import matplotlib.font_manager as fm
 import textwrap
-import gTTS
+from gtts import gTTS  # ✅ Replaces pyttsx3
 
 st.set_page_config(layout="centered")
-st.title("📜 Scrolling Text Video with Center Highlight")
+st.title("📜 Scrolling Text Video with Center Highlight + Audio")
 
 text = st.text_area("Paste your text here", height=400)
 font_size = st.slider("Font size", 20, 60, 40)
-highlight_lines = st.checkbox("Highlight center line", value=True)
+highlight_lines = st.checkbox("✅ Highlight center line while reading", value=True)
 
 MAX_CHARS = 20000
 if len(text) > MAX_CHARS:
@@ -21,6 +21,7 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
+# ————— Feature 1: Scrolling Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video..."):
 
@@ -66,17 +67,14 @@ if st.button("🎬 Generate Scrolling Video"):
             if current_line_index >= total_lines:
                 current_line_index = total_lines - 1
 
-            # Position center of current line in the vertical middle
             center_y_abs = line_positions[current_line_index][1]
             offset = center_y_abs - H // 2 + line_height // 2
             offset = np.clip(offset, 0, scroll_range)
 
-            # Create cropped image
             frame_img = Image.fromarray(full_img_np[offset:offset + H, :, :])
             draw_frame = ImageDraw.Draw(frame_img)
 
             if highlight_lines:
-                # Find all lines in view and draw them, highlight the centered one
                 for x, y_abs, line in line_positions:
                     y_rel = y_abs - offset
                     if 0 <= y_rel <= H - line_height:
@@ -94,19 +92,15 @@ if st.button("🎬 Generate Scrolling Video"):
             st.video(tmpfile.name)
             st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
 
-# ————— Feature 2: Text to Audio via gTTS —————
+# ————— Feature 2: Text to Audio —————
 if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
-            tts = gTTS(text=text, lang="en")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_file:
-                tts.save(audio_file.name)
+            tts = gTTS(text)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
+                tts.save(audiofile.name)
                 st.success("✅ Audio ready!")
-                st.audio(audio_file.name)
-                st.download_button(
-                    "⬇️ Download MP3",
-                    open(audio_file.name, "rb").read(),
-                    file_name="text_audio.mp3"
-                )
+                st.audio(audiofile.name)
+                st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
