@@ -43,7 +43,7 @@ if st.button("🎬 Generate Scrolling Video"):
         img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        y = img_height - H
+        y = (img_height - total_text_height) // 2
         for line in wrapped_lines:
             w, _ = draw.textsize(line, font=font)
             x = max((W - w) // 2, side_margin)
