@@ -66,8 +66,13 @@ if st.button("🎬 Generate Scrolling Video"):
         # Create video
         clip = ImageSequenceClip(frames, fps=24)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-            st.success("✅ Video ready!")
-            st.video(tmpfile.name)
-            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_text.mp4")
+      with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+    clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
+
+# Load the video into memory
+with open(tmpfile.name, "rb") as f:
+    video_bytes = f.read()
+
+st.success("✅ Video ready!")
+st.video(video_bytes)
+st.download_button("⬇️ Download MP4", video_bytes, file_name="scrolling_text.mp4")
