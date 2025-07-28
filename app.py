@@ -1,64 +1,62 @@
 import streamlit as st
-import tempfile
-from moviepy.editor import TextClip
+import time
 
-# UI Settings
-st.set_page_config(page_title="Scrolling Text to Video", layout="centered")
-st.title("🎬 Scrolling Text to MP4 (1280x720)")
+# Page config
+st.set_page_config(page_title="Looping Scrolling Text", layout="centered")
 
-# Input
-raw_text = st.text_area("Enter text to scroll from bottom to top:", height=300)
-scroll_speed = st.slider("Scroll speed (pixels/sec)", 20, 100, 50)
-video_duration = st.slider("Video duration (seconds)", 10, 120, 60)
+# CSS for 1280x720 black video-style layout
+st.markdown("""
+    <style>
+    .scroll-box {
+        width: 1280px;
+        height: 720px;
+        background-color: black;
+        color: white;
+        font-size: 28px;
+        font-family: monospace;
+        padding: 40px;
+        overflow: hidden;
+        line-height: 1.8;
+    }
+    .center-title {
+        text-align: center;
+        color: white;
+        font-family: monospace;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# Generate video
-if st.button("🎥 Generate Video"):
-    if not raw_text.strip():
-        st.warning("Please enter some text.")
+# Title
+st.markdown("<h2 class='center-title'>📜 Looping Scrolling Text</h2>", unsafe_allow_html=True)
+
+# Upload or manual entry
+upload = st.file_uploader("Upload a .txt file", type="txt")
+if upload:
+    content = upload.read().decode("utf-8")
+else:
+    content = st.text_area("Or enter your text manually:", height=300)
+
+scroll_speed = st.slider("Scroll speed (seconds per step)", 0.05, 1.0, 0.15)
+
+# Start button
+if st.button("Start Scrolling"):
+    if not content.strip():
+        st.warning("Please upload or enter text first.")
     else:
-        with st.spinner("Generating video..."):
+        lines = content.strip().split("\n")
+        display = st.empty()
+        i = 0
 
-            # Video settings
-            video_width = 1280
-            video_height = 720
-            font_size = 48
-            font = "Courier"
-            bg_color = "black"
-            text_color = "white"
-
-            # Create text clip
-            text_clip = TextClip(
-                raw_text.strip(),
-                fontsize=font_size,
-                font=font,
-                color=text_color,
-                size=(video_width, None),
-                method="caption"
-            )
-
-            # Scroll animation
-            text_height = text_clip.h
-            scroll_distance = text_height + video_height
-            single_duration = scroll_distance / scroll_speed
-
-            def scroll_position(t):
-                y = video_height - (t * scroll_speed)
-                return ("center", y)
-
-            scrolling_clip = (
-                text_clip.set_position(scroll_position)
-                .set_duration(single_duration)
-                .on_color(size=(video_width, video_height), color=bg_color, col_opacity=1)
-            )
-
-            # Loop the clip to match full video duration
-            final_clip = scrolling_clip.loop(duration=video_duration)
-
-            # Save to temporary file
-            temp_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            output_path = temp_video.name
-            final_clip.write_videofile(output_path, fps=24, codec="libx264", audio=False)
-
-        st.success("✅ Video created!")
-        st.video(output_path)
-        st.download_button("📥 Download MP4", open(output_path, "rb"), file_name="scrolling_text.mp4")
+        # Simulate infinite loop (Streamlit doesn't support real infinite loops, so we scroll a lot)
+        for _ in range(9999):
+            window_lines = lines[i:i+20]
+            if len(window_lines) < 20:
+                window_lines += lines[:20 - len(window_lines)]  # loop back to beginning
+            i = (i + 1) % len(lines)
+            scroll_html = f"""
+            <div class="scroll-box">
+            {'<br>'.join(window_lines)}
+            </div>
+            """
+            display.markdown(scroll_html, unsafe_allow_html=True)
+            time.sleep(scroll_speed)
