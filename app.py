@@ -94,16 +94,19 @@ if st.button("🎬 Generate Scrolling Video"):
             st.video(tmpfile.name)
             st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
 
-# 🔊 Text-to-speech feature
-if st.button("🔉 Generate Audio (MP3)"):
+# ————— Feature 2: Text to Audio via gTTS —————
+if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
-            engine = pyttsx3.init()
+            tts = gTTS(text=text, lang="en")
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_file:
-                engine.save_to_file(text, audio_file.name)
-                engine.runAndWait()
+                tts.save(audio_file.name)
                 st.success("✅ Audio ready!")
                 st.audio(audio_file.name)
-                st.download_button("⬇️ Download MP3", open(audio_file.name, "rb").read(), file_name="text_audio.mp3")
+                st.download_button(
+                    "⬇️ Download MP3",
+                    open(audio_file.name, "rb").read(),
+                    file_name="text_audio.mp3"
+                )
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
