@@ -1,40 +1,37 @@
 import streamlit as st
 from moviepy.editor import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 import os
 import tempfile
-import matplotlib.font_manager as fm
 import textwrap
 
-st.set_page_config(layout="centered")
+# Constants
+W, H = 1280, 720
+FPS = 30
+DURATION = 30  # video duration in seconds
+FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+FONT_SIZE = 40
+SIDE_MARGIN = 60
+
 st.title("🎞️ Scrolling Text Video Generator")
+st.write("Paste your text below and download a video with smooth upward scrolling.")
 
-text = st.text_area("📜 Paste your text here", height=400)
-font_size = st.slider("Font size", 20, 60, 40)
-scroll_speed = st.slider("Scroll speed (lower = slower)", 1, 20, 5)
+text_input = st.text_area("✏️ Enter your text here:", height=300)
+generate = st.button("🎬 Generate Scrolling Video")
 
-if st.button("🎬 Generate Scrolling Video"):
+if generate and text_input.strip():
     with st.spinner("Creating video..."):
 
-        # Video resolution
-        W, H = 1280, 720
-        side_margin = 60  # margin from left/right
+        # Load font
+        font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Font setup
-        font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except:
-            font = ImageFont.load_default()
-
-        # Wrap long lines to fit within side margins
-        max_chars = (W - 2 * side_margin) // (font_size // 2)
+        # Wrap long lines considering horizontal margin
+        max_chars = (W - 2 * SIDE_MARGIN) // (FONT_SIZE // 2)
         wrapped_lines = []
-        for line in text.split("\n"):
+        for line in text_input.split("\n"):
             wrapped_lines += textwrap.wrap(line, width=max_chars)
 
-        # Estimate total text height
+        # Calculate height
         line_height = font.getbbox("A")[3] + 10
         total_text_height = line_height * len(wrapped_lines)
         img_height = max(total_text_height + H, H * 2)
@@ -43,36 +40,33 @@ if st.button("🎬 Generate Scrolling Video"):
         img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        y = (img_height - total_text_height) // 2
+        y = (img_height - total_text_height) // 2  # Start from middle
         for line in wrapped_lines:
             w, _ = draw.textsize(line, font=font)
-            x = max((W - w) // 2, side_margin)
+            x = max((W - w) // 2, SIDE_MARGIN)
             draw.text((x, y), line, font=font, fill="white")
             y += line_height
 
-        # Generate video frames
-        scroll_range = img_height - H
-        step = scroll_speed
+        # Generate frames
         frames = []
+        scroll_pixels = img_height - H
+        pixels_per_frame = scroll_pixels / (FPS * DURATION)
+        for i in range(int(FPS * DURATION)):
+            top = int(i * pixels_per_frame)
+            frame = img.crop((0, top, W, top + H))
+            frames.append(frame)
 
-        for offset in range(0, scroll_range, step):
-            crop = img.crop((0, offset, W, offset + H))
-            frames.append(np.array(crop))
+        # Save video
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+            clip = ImageSequenceClip([f for f in frames], fps=FPS)
+            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
 
-        # Add pause at end
-        for _ in range(20):
-            frames.append(frames[-1])
+        # Display and allow download
+        with open(tmpfile.name, "rb") as f:
+            video_bytes = f.read()
 
-        # Create video
-        clip = ImageSequenceClip(frames, fps=24)
-
-      with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-    clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-
-# Load the video into memory
-with open(tmpfile.name, "rb") as f:
-    video_bytes = f.read()
-
-st.success("✅ Video ready!")
-st.video(video_bytes)
-st.download_button("⬇️ Download MP4", video_bytes, file_name="scrolling_text.mp4")
+        st.success("✅ Video ready!")
+        st.video(video_bytes)
+        st.download_button("⬇️ Download MP4", video_bytes, file_name="scrolling_text.mp4")
+else:
+    st.info("Please enter some text and click 'Generate Scrolling Video'.")
