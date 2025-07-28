@@ -8,65 +8,66 @@ import textwrap
 # Constants
 W, H = 1280, 720
 FPS = 30
-DURATION = 30  # video duration in seconds
+DURATION = 30  # seconds
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_SIZE = 40
-SIDE_MARGIN = 60
+SIDE_MARGIN = 60  # left/right padding
 
-st.title("🎞️ Scrolling Text Video Generator")
-st.write("Paste your text below and download a video with smooth upward scrolling.")
+st.title("🖤 Scrolling Text Video Generator")
+st.write("Enter any amount of text. It'll scroll slowly from the middle upwards in a 1280x720 video.")
 
-text_input = st.text_area("✏️ Enter your text here:", height=300)
-generate = st.button("🎬 Generate Scrolling Video")
+text_input = st.text_area("✏️ Your Scrolling Text:", height=300)
+generate = st.button("🎞️ Generate Video")
 
 if generate and text_input.strip():
-    with st.spinner("Creating video..."):
+    with st.spinner("📽️ Generating video..."):
 
         # Load font
         font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-        # Wrap long lines considering horizontal margin
+        # Wrap long lines
         max_chars = (W - 2 * SIDE_MARGIN) // (FONT_SIZE // 2)
-        wrapped_lines = []
+        lines = []
         for line in text_input.split("\n"):
-            wrapped_lines += textwrap.wrap(line, width=max_chars)
+            lines += textwrap.wrap(line, width=max_chars)
 
-        # Calculate height
+        # Calculate text block height
         line_height = font.getbbox("A")[3] + 10
-        total_text_height = line_height * len(wrapped_lines)
-        img_height = max(total_text_height + H, H * 2)
+        text_height = line_height * len(lines)
+        total_height = max(text_height + H, H * 2)
 
-        # Create full image with all text
-        img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
+        # Create full canvas image
+        img = Image.new("RGB", (W, total_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        y = (img_height - total_text_height) // 2  # Start from middle
-        for line in wrapped_lines:
+        # Start Y from middle of canvas
+        y = (total_height - text_height) // 2
+        for line in lines:
             w, _ = draw.textsize(line, font=font)
             x = max((W - w) // 2, SIDE_MARGIN)
             draw.text((x, y), line, font=font, fill="white")
             y += line_height
 
-        # Generate frames
+        # Scroll: Create frame-by-frame video
         frames = []
-        scroll_pixels = img_height - H
-        pixels_per_frame = scroll_pixels / (FPS * DURATION)
+        scroll_range = total_height - H
+        px_per_frame = scroll_range / (FPS * DURATION)
         for i in range(int(FPS * DURATION)):
-            top = int(i * pixels_per_frame)
+            top = int(i * px_per_frame)
             frame = img.crop((0, top, W, top + H))
             frames.append(frame)
 
-        # Save video
+        # Write video to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
             clip = ImageSequenceClip([f for f in frames], fps=FPS)
             clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
 
-        # Display and allow download
+        # Display + Download
         with open(tmpfile.name, "rb") as f:
             video_bytes = f.read()
 
-        st.success("✅ Video ready!")
+        st.success("✅ Done!")
         st.video(video_bytes)
-        st.download_button("⬇️ Download MP4", video_bytes, file_name="scrolling_text.mp4")
+        st.download_button("⬇️ Download Video", video_bytes, file_name="scrolling_text.mp4")
 else:
-    st.info("Please enter some text and click 'Generate Scrolling Video'.")
+    st.info("Enter some text and click the button to generate a video.")
