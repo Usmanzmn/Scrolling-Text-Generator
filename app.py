@@ -5,7 +5,7 @@ import numpy as np
 import tempfile
 import matplotlib.font_manager as fm
 import textwrap
-import pyttsx3
+import gTTS
 
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight")
