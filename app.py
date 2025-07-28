@@ -1,62 +1,63 @@
 import streamlit as st
-import time
+from moviepy.editor import *
+from PIL import Image, ImageDraw, ImageFont
+import os
+import tempfile
 
-# Page config
-st.set_page_config(page_title="Looping Scrolling Text", layout="centered")
+# Streamlit UI
+st.set_page_config(page_title="Scrolling Text Video Generator", layout="centered")
+st.title("📜 Scrolling Text to Video Generator")
 
-# CSS for 1280x720 black video-style layout
-st.markdown("""
-    <style>
-    .scroll-box {
-        width: 1280px;
-        height: 720px;
-        background-color: black;
-        color: white;
-        font-size: 28px;
-        font-family: monospace;
-        padding: 40px;
-        overflow: hidden;
-        line-height: 1.8;
-    }
-    .center-title {
-        text-align: center;
-        color: white;
-        font-family: monospace;
-    }
-    </style>
-""", unsafe_allow_html=True)
+uploaded_file = st.file_uploader("Upload a .txt file", type=["txt"])
+scroll_speed = st.slider("Scroll speed (pixels per frame)", 1, 10, 2)
 
-# Title
-st.markdown("<h2 class='center-title'>📜 Looping Scrolling Text</h2>", unsafe_allow_html=True)
-
-# Upload or manual entry
-upload = st.file_uploader("Upload a .txt file", type="txt")
-if upload:
-    content = upload.read().decode("utf-8")
+if uploaded_file:
+    text = uploaded_file.read().decode("utf-8")
 else:
-    content = st.text_area("Or enter your text manually:", height=300)
+    text = st.text_area("Or enter text manually:")
 
-scroll_speed = st.slider("Scroll speed (seconds per step)", 0.05, 1.0, 0.15)
+if st.button("Generate Video") and text.strip():
+    with st.spinner("Rendering video..."):
 
-# Start button
-if st.button("Start Scrolling"):
-    if not content.strip():
-        st.warning("Please upload or enter text first.")
-    else:
-        lines = content.strip().split("\n")
-        display = st.empty()
-        i = 0
+        # Set video dimensions
+        width, height = 1280, 720
+        bg_color = (0, 0, 0)
+        text_color = (255, 255, 255)
+        font_size = 32
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"  # safe on Streamlit Cloud
 
-        # Simulate infinite loop (Streamlit doesn't support real infinite loops, so we scroll a lot)
-        for _ in range(9999):
-            window_lines = lines[i:i+20]
-            if len(window_lines) < 20:
-                window_lines += lines[:20 - len(window_lines)]  # loop back to beginning
-            i = (i + 1) % len(lines)
-            scroll_html = f"""
-            <div class="scroll-box">
-            {'<br>'.join(window_lines)}
-            </div>
-            """
-            display.markdown(scroll_html, unsafe_allow_html=True)
-            time.sleep(scroll_speed)
+        # Create long text image
+        lines = text.strip().split("\n")
+        line_height = font_size + 10
+        img_height = line_height * len(lines) + height  # enough for scrolling
+        img = Image.new("RGB", (width, img_height), color=bg_color)
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype(font_path, font_size)
+
+        y = img_height - height  # start from bottom
+        for line in lines:
+            draw.text((40, y), line, font=font, fill=text_color)
+            y += line_height
+
+        # Save temp image
+        tmp_dir = tempfile.mkdtemp()
+        img_path = os.path.join(tmp_dir, "text_image.png")
+        img.save(img_path)
+
+        # Create video by moving crop window up
+        clip = ImageClip(img_path)
+        frames = []
+        for y in range(0, img_height - height, scroll_speed):
+            frame = clip.crop(y1=y, y2=y + height).get_frame(0)
+            frames.append(frame)
+
+        video = ImageSequenceClip(frames, fps=24)
+
+        # Save video
+        video_path = os.path.join(tmp_dir, "scrolling_text.mp4")
+        video.write_videofile(video_path, codec='libx264')
+
+        # Show + download
+        st.video(video_path)
+        with open(video_path, "rb") as f:
+            st.download_button("📥 Download MP4", f, file_name="scrolling_text.mp4")
