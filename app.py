@@ -17,39 +17,40 @@ scroll_speed = st.slider("Scroll speed (lower = slower)", 1, 20, 5)
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video..."):
 
-        # Video size
+        # Video resolution
         W, H = 1280, 720
+        side_margin = 60  # margin from left/right
 
-        # Find system font path
+        # Font setup
         font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
         try:
             font = ImageFont.truetype(font_path, font_size)
         except:
             font = ImageFont.load_default()
 
-        # Wrap long lines
-        max_chars = W // (font_size // 2)  # Estimate characters per line
+        # Wrap long lines to fit within side margins
+        max_chars = (W - 2 * side_margin) // (font_size // 2)
         wrapped_lines = []
         for line in text.split("\n"):
             wrapped_lines += textwrap.wrap(line, width=max_chars)
 
-        # Calculate height
+        # Estimate total text height
         line_height = font.getbbox("A")[3] + 10
         total_text_height = line_height * len(wrapped_lines)
         img_height = max(total_text_height + H, H * 2)
 
-        # Create image
+        # Create full image with all text
         img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
         y = img_height - H
         for line in wrapped_lines:
             w, _ = draw.textsize(line, font=font)
-            x = (W - w) // 2
+            x = max((W - w) // 2, side_margin)
             draw.text((x, y), line, font=font, fill="white")
             y += line_height
 
-        # Convert to frames
+        # Generate video frames
         scroll_range = img_height - H
         step = scroll_speed
         frames = []
@@ -58,10 +59,11 @@ if st.button("🎬 Generate Scrolling Video"):
             crop = img.crop((0, offset, W, offset + H))
             frames.append(np.array(crop))
 
-        for _ in range(20):  # Pause at end
+        # Add pause at end
+        for _ in range(20):
             frames.append(frames[-1])
 
-        # Generate video
+        # Create video
         clip = ImageSequenceClip(frames, fps=24)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
