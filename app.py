@@ -43,7 +43,7 @@ if st.button("🎬 Generate Scrolling Video"):
         img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # 🟢 Start text from the vertical middle of the image
+        # Start text from middle
         y = (img_height - total_text_height) // 2
         for line in wrapped_lines:
             w, _ = draw.textsize(line, font=font)
@@ -64,11 +64,14 @@ if st.button("🎬 Generate Scrolling Video"):
         for _ in range(20):
             frames.append(frames[-1])
 
-        # Create video
+        # Create video and save
         clip = ImageSequenceClip(frames, fps=24)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-            st.success("✅ Video ready!")
-            st.video(tmpfile.name)
-            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_text.mp4")
+        tmp_path = os.path.join(tempfile.gettempdir(), "scrolling_text.mp4")
+        clip.write_videofile(tmp_path, codec="libx264", audio=False)
+
+        # Display and download
+        st.success("✅ Video ready!")
+        st.video(tmp_path)
+        with open(tmp_path, "rb") as file:
+            st.download_button("⬇️ Download MP4", file.read(), file_name="scrolling_text.mp4")
