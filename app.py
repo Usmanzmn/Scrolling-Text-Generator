@@ -2,102 +2,124 @@ import streamlit as st
 from moviepy.editor import VideoClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
-import os
 import tempfile
 import matplotlib.font_manager as fm
 import textwrap
 import pyttsx3
+import io
 
 st.set_page_config(layout="centered")
-st.title("🎞️ Scrolling Text & Audio Generator (20,000+ characters supported)")
+st.title("🛠️ Text Media Generator (Video + Audio)")
 
-tab1, tab2 = st.tabs(["📽️ Text to Video", "🔊 Text to Audio"])
+# Input area
+text = st.text_area("📜 Paste your text here", height=400)
+font_size = st.slider("🎨 Font size", 20, 60, 40)
+scroll_speed = st.slider("🚀 Scroll speed (lower = slower)", 1, 20, 5)
+highlight_lines = st.checkbox("✅ Highlight line while reading", value=True)
 
-with tab1:
-    text = st.text_area("📜 Paste your text here", height=400)
-    font_size = st.slider("Font size", 20, 60, 40)
-    scroll_speed = st.slider("Scroll speed (lower = slower)", 1, 20, 5)
-    highlight_lines = st.checkbox("✅ Show highlighted line reading", value=True)
+MAX_CHARS = 20000
+if len(text) > MAX_CHARS:
+    st.warning(f"⚠️ Text is too long ({len(text)} characters). Only the first {MAX_CHARS} will be used.")
+    text = text[:MAX_CHARS]
 
-    MAX_CHARS = 20000
-    if len(text) > MAX_CHARS:
-        st.warning(f"⚠️ Text is too long ({len(text)} characters). Only the first {MAX_CHARS} will be used.")
-        text = text[:MAX_CHARS]
+st.caption(f"🧮 {len(text)}/{MAX_CHARS} characters")
 
-    st.caption(f"🧮 {len(text)}/{MAX_CHARS} characters")
+# ==============================
+# 📽️ Feature 1: Text to Scrolling Video
+# ==============================
+if st.button("🎬 Generate Scrolling Video"):
+    with st.spinner("Creating video..."):
 
-    if st.button("🎬 Generate Scrolling Video"):
-        with st.spinner("Creating video..."):
+        # Video resolution
+        W, H = 1280, 720
+        side_margin = 60
 
-            W, H = 1280, 720
-            side_margin = 60
+        # Font setup
+        font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
 
-            font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-            try:
-                font = ImageFont.truetype(font_path, font_size)
-            except:
-                font = ImageFont.load_default()
+        # Wrap long lines
+        max_chars = (W - 2 * side_margin) // (font_size // 2)
+        wrapped_lines = []
+        for line in text.split("\n"):
+            wrapped_lines += textwrap.wrap(line, width=max_chars)
 
-            max_chars = (W - 2 * side_margin) // (font_size // 2)
-            wrapped_lines = []
-            for line in text.split("\n"):
-                wrapped_lines += textwrap.wrap(line, width=max_chars)
+        # Line height & total height
+        line_height = font.getbbox("A")[3] + 10
+        total_text_height = line_height * len(wrapped_lines)
+        img_height = total_text_height + H  # Enough room to scroll
 
-            line_height = font.getbbox("A")[3] + 10
-            total_text_height = line_height * len(wrapped_lines)
-            img_height = total_text_height + H
+        # Store line positions
+        line_positions = []
 
-            y_positions = []
-            y = (img_height - total_text_height) // 2
-            for _ in wrapped_lines:
-                y_positions.append(y)
-                y += line_height
+        # Pre-render full image
+        img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        y = (img_height - total_text_height) // 2
+        for line in wrapped_lines:
+            w, _ = draw.textsize(line, font=font)
+            x = max((W - w) // 2, side_margin)
+            draw.text((x, y), line, font=font, fill="white")
+            line_positions.append((x, y, line))
+            y += line_height
 
-            full_img_np = np.zeros((img_height, W, 3), dtype=np.uint8)
+        full_img_np = np.array(img)
+        scroll_range = img_height - H
+        duration = scroll_range / scroll_speed / 24
 
-            scroll_range = img_height - H
-            highlight_duration = 1  # seconds
-            fps = 24
-            total_duration = len(wrapped_lines) * highlight_duration
+        def make_frame(t):
+            offset = int(t * scroll_speed * 24)
+            offset = min(offset, scroll_range)
 
-            def make_frame(t):
-                current_line = int(t // highlight_duration)
-                current_line = min(current_line, len(wrapped_lines) - 1)
+            if not highlight_lines:
+                return full_img_np[offset:offset + H, :, :]
 
-                img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
-                draw = ImageDraw.Draw(img)
+            # Highlight version
+            img_hl = Image.new("RGB", (W, H), color=(0, 0, 0))
+            draw_hl = ImageDraw.Draw(img_hl)
 
-                for i, line in enumerate(wrapped_lines):
-                    fill = "yellow" if highlight_lines and i == current_line else "white"
-                    w, _ = draw.textsize(line, font=font)
-                    x = max((W - w) // 2, side_margin)
-                    draw.text((x, y_positions[i]), line, font=font, fill=fill)
+            visible_lines = []
+            for x, y_abs, line in line_positions:
+                if offset <= y_abs <= offset + H - line_height:
+                    y_rel = y_abs - offset
+                    visible_lines.append((x, y_rel, line, y_abs))
 
-                offset = int(t * scroll_speed * fps)
-                offset = min(offset, scroll_range)
-                frame = img.crop((0, offset, W, offset + H))
-                return np.array(frame)
+            # Highlight current line
+            idx = int(t // 1)
+            highlight_y_abs = visible_lines[idx][3] if idx < len(visible_lines) else -1
 
-            clip = VideoClip(make_frame, duration=total_duration + 1).set_fps(fps)
+            for x, y_rel, line, y_abs in visible_lines:
+                color = "yellow" if y_abs == highlight_y_abs else "white"
+                draw_hl.text((x, y_rel), line, font=font, fill=color)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-                clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-                st.success("✅ Video ready!")
-                st.video(tmpfile.name)
-                st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_text.mp4")
+            return np.array(img_hl)
 
-with tab2:
-    st.header("🔊 Convert Text to Audio")
-    tts_text = st.text_area("🗣️ Paste your text to convert to audio", height=300)
-    voice_rate = st.slider("🌀 Voice Speed", 100, 250, 150)
-    if st.button("🎧 Generate Audio"):
-        with st.spinner("Generating audio..."):
-            engine = pyttsx3.init()
-            engine.setProperty('rate', voice_rate)
+        clip = VideoClip(make_frame, duration=duration + 1)
+        clip = clip.set_fps(24)
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_file:
-                engine.save_to_file(tts_text, audio_file.name)
-                engine.runAndWait()
-                st.success("✅ Audio ready!")
-                st.audio(audio_file.name)
-                st.download_button("⬇️ Download MP3", open(audio_file.name, "rb").read(), file_name="text_audio.mp3")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
+            st.success("✅ Video ready!")
+            st.video(tmpfile.name)
+            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_text.mp4")
+
+# ==============================
+# 🔊 Feature 2: Text to Audio
+# ==============================
+if st.button("🔉 Generate Audio (Text to Speech)"):
+    with st.spinner("Creating audio..."):
+
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 160)
+        engine.setProperty('volume', 1.0)
+
+        # Save to buffer using tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
+            engine.save_to_file(text, tmp_audio.name)
+            engine.runAndWait()
+            st.success("✅ Audio ready!")
+            st.audio(tmp_audio.name)
+            st.download_button("⬇️ Download MP3", open(tmp_audio.name, "rb").read(), file_name="text_audio.mp3")
