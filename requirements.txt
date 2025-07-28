@@ -2,3 +2,4 @@ streamlit==1.32.2
 moviepy==1.0.3
 Pillow==9.5.0
 numpy==1.23.5
+matplotlib==3.7.1
