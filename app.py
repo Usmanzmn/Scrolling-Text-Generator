@@ -5,6 +5,7 @@ import numpy as np
 import os
 import tempfile
 import matplotlib.font_manager as fm
+import textwrap
 
 st.set_page_config(layout="centered")
 st.title("🎞️ Scrolling Text Video Generator")
@@ -26,17 +27,23 @@ if st.button("🎬 Generate Scrolling Video"):
         except:
             font = ImageFont.load_default()
 
-        # Create long text image
-        lines = text.split("\n")
+        # Wrap long lines
+        max_chars = W // (font_size // 2)  # Estimate characters per line
+        wrapped_lines = []
+        for line in text.split("\n"):
+            wrapped_lines += textwrap.wrap(line, width=max_chars)
+
+        # Calculate height
         line_height = font.getbbox("A")[3] + 10
-        total_text_height = line_height * len(lines)
+        total_text_height = line_height * len(wrapped_lines)
         img_height = max(total_text_height + H, H * 2)
 
+        # Create image
         img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
 
         y = img_height - H
-        for line in lines:
+        for line in wrapped_lines:
             w, _ = draw.textsize(line, font=font)
             x = (W - w) // 2
             draw.text((x, y), line, font=font, fill="white")
@@ -51,8 +58,7 @@ if st.button("🎬 Generate Scrolling Video"):
             crop = img.crop((0, offset, W, offset + H))
             frames.append(np.array(crop))
 
-        # Repeat last frame briefly for pause
-        for _ in range(20):
+        for _ in range(20):  # Pause at end
             frames.append(frames[-1])
 
         # Generate video
