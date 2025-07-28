@@ -1,59 +1,65 @@
 import streamlit as st
-from moviepy.editor import ImageClip, ImageSequenceClip
+from moviepy.editor import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 import os
 import tempfile
+import matplotlib.font_manager as fm
 
-st.set_page_config(page_title="Scrolling Text Generator", layout="centered")
-st.title("📜 Scrolling Text to Video Generator")
+st.set_page_config(layout="centered")
+st.title("🎞️ Scrolling Text Video Generator")
 
-uploaded_file = st.file_uploader("📄 Upload a .txt file", type=["txt"])
-scroll_speed = st.slider("🌀 Scroll Speed (pixels per frame)", 1, 10, 2)
+text = st.text_area("📜 Paste your text here", height=400)
+font_size = st.slider("Font size", 20, 60, 40)
+scroll_speed = st.slider("Scroll speed (lower = slower)", 1, 20, 5)
 
-if uploaded_file:
-    text = uploaded_file.read().decode("utf-8")
-else:
-    text = st.text_area("Or enter text manually:")
+if st.button("🎬 Generate Scrolling Video"):
+    with st.spinner("Creating video..."):
 
-if st.button("🎥 Generate Video") and text.strip():
-    with st.spinner("Generating video..."):
+        # Video size
+        W, H = 1280, 720
 
-        width, height = 1280, 720
-        bg_color = (0, 0, 0)
-        text_color = (255, 255, 255)
-        font_size = 36
-        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"  # Works on Streamlit Cloud
+        # Find system font path
+        font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
 
-        lines = text.splitlines()
-        line_height = font_size + 10
+        # Create long text image
+        lines = text.split("\n")
+        line_height = font.getbbox("A")[3] + 10
         total_text_height = line_height * len(lines)
-        image_height = total_text_height + height  # extra space for scroll-in
+        img_height = max(total_text_height + H, H * 2)
 
-        # Create a tall image with all the text
-        img = Image.new("RGB", (width, image_height), color=bg_color)
+        img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
         draw = ImageDraw.Draw(img)
-        font = ImageFont.truetype(font_path, font_size)
 
-        y = height  # start below the visible frame
+        y = img_height - H
         for line in lines:
-            draw.text((40, y), line, font=font, fill=text_color)
+            w, _ = draw.textsize(line, font=font)
+            x = (W - w) // 2
+            draw.text((x, y), line, font=font, fill="white")
             y += line_height
 
-        tmp_dir = tempfile.mkdtemp()
-        image_path = os.path.join(tmp_dir, "scroll.png")
-        img.save(image_path)
-
-        base_clip = ImageClip(image_path)
+        # Convert to frames
+        scroll_range = img_height - H
+        step = scroll_speed
         frames = []
 
-        for y in range(0, image_height - height, scroll_speed):
-            cropped = base_clip.crop(y1=y, y2=y + height).get_frame(0)
-            frames.append(cropped)
+        for offset in range(0, scroll_range, step):
+            crop = img.crop((0, offset, W, offset + H))
+            frames.append(np.array(crop))
 
+        # Repeat last frame briefly for pause
+        for _ in range(20):
+            frames.append(frames[-1])
+
+        # Generate video
         clip = ImageSequenceClip(frames, fps=24)
-        video_path = os.path.join(tmp_dir, "scrolling_text.mp4")
-        clip.write_videofile(video_path, codec='libx264', audio=False)
 
-        st.video(video_path)
-        with open(video_path, "rb") as f:
-            st.download_button("📥 Download MP4", f, file_name="scrolling_text.mp4")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
+            st.success("✅ Video ready!")
+            st.video(tmpfile.name)
+            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_text.mp4")
