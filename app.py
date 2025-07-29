@@ -140,11 +140,13 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 sync_clip = VideoClip(make_sync_frame, duration=audio_duration)
                 sync_clip = sync_clip.set_audio(audio).set_fps(24)
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-                    sync_clip.write_videofile(tmpfile.name, codec="libx264", audio_codec="aac")
-                    st.success("✅ Sync Video created!")
-                    st.video(tmpfile.name)
-                    st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
+                downloads_path = os.path.join(os.path.expanduser("~"), "Downloads", "scrolling_highlight_video.mp4")
+clip.write_videofile(downloads_path, codec="libx264", audio=False)
+
+st.success("✅ Video created!")
+st.video(downloads_path)
+with open(downloads_path, "rb") as file:
+    st.download_button("⬇️ Download MP4", file.read(), file_name="scrolling_highlight_video.mp4")
 
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
