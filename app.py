@@ -162,40 +162,41 @@ if st.button("🔊 Generate Audio (MP3)"):
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
 
-# ————— Feature 4: Replace Background in Existing Video —————
-st.header("🌄 Replace Background in Existing Video")
-video_file = st.file_uploader("Upload a video (MP4)", type=["mp4"])
-image_files = st.file_uploader("Upload background image(s)", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
+# ————— Feature 4: Replace Background with Images —————
+st.header("📽 Replace Background in Existing Video")
+uploaded_video = st.file_uploader("Upload scrolling text video (MP4)", type=["mp4"])
+uploaded_images = st.file_uploader("Upload background images (JPG or PNG)", type=["jpg", "png"], accept_multiple_files=True)
 
-if st.button("🎨 Replace Background") and video_file and image_files:
-    with st.spinner("Processing video with new background..."):
-        try:
-            import cv2
-            from moviepy.editor import VideoFileClip
+if uploaded_video and uploaded_images:
+    if st.button("🎨 Generate New Video with Replaced Background"):
+        with st.spinner("Processing background replacement..."):
 
-            temp_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
-            with open(temp_video_path, "wb") as f:
-                f.write(video_file.read())
+            from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
+            import random
 
-            clip = VideoFileClip(temp_video_path)
-            W, H = clip.size
+            video = VideoFileClip(uploaded_video.name)
+            bg_images = [Image.open(img).resize((1280, 720)) for img in uploaded_images]
+            bg_nps = [np.array(img) for img in bg_images]
+            num_images = len(bg_nps)
 
-            backgrounds = [Image.open(img).resize((W, H)).convert("RGB") for img in image_files]
-            bg_index = 0
+            def generate_video_with_images():
+                bg_index = 0  # Now properly scoped
 
-            def frame_with_bg(t):
-                nonlocal bg_index
-                frame = clip.get_frame(t)
-                bg = np.array(backgrounds[int(t * 2) % len(backgrounds)])  # change image every 0.5s
-                return cv2.addWeighted(bg, 0.5, frame, 0.5, 0)
+                def make_frame(t):
+                    nonlocal bg_index
+                    bg_index = int(t // 1) % num_images  # change background every second
+                    bg = bg_nps[bg_index]
+                    frame = video.get_frame(t)
+                    frame_rgba = np.dstack((frame, np.full((frame.shape[0], frame.shape[1]), 255, dtype=np.uint8)))
+                    result = Image.alpha_composite(Image.fromarray(bg).convert("RGBA"), Image.fromarray(frame_rgba).convert("RGBA"))
+                    return np.array(result.convert("RGB"))
 
-            final_clip = clip.fl_image(lambda frame: frame_with_bg(clip.reader.pos / clip.fps))
+                new_clip = VideoClip(make_frame, duration=video.duration).set_fps(video.fps)
+                return new_clip
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as outvid:
-                final_clip.write_videofile(outvid.name, codec="libx264", audio_codec="aac")
-                st.success("✅ Video with new background ready!")
-                st.video(outvid.name)
-                st.download_button("⬇️ Download Updated Video", open(outvid.name, "rb").read(), file_name="background_replaced_video.mp4")
-
-        except Exception as e:
-            st.error(f"❌ Failed to replace background: {e}")
+            final_video = generate_video_with_images()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as out_file:
+                final_video.write_videofile(out_file.name, codec="libx264", audio=False)
+                st.success("✅ Video with new background created!")
+                st.video(out_file.name)
+                st.download_button("⬇️ Download Video with New Background", open(out_file.name, "rb").read(), file_name="background_replaced_video.mp4")
