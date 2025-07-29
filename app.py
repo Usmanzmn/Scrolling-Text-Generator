@@ -30,9 +30,11 @@ if st.button("🎬 Generate Scrolling Video"):
         side_margin = 60
 
         font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-        font = ImageFont.truetype(font_path, font_size)
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
 
-        # Wrap lines
         max_chars = (W - 2 * side_margin) // (font_size // 2)
         wrapped_lines = []
         for line in text.split("\n"):
@@ -61,10 +63,13 @@ if st.button("🎬 Generate Scrolling Video"):
 
         def make_frame(t):
             current_line_index = int(t / 0.5)
-            current_line_index = min(current_line_index, total_lines - 1)
+            if current_line_index >= total_lines:
+                current_line_index = total_lines - 1
+
             center_y_abs = line_positions[current_line_index][1]
             offset = center_y_abs - H // 2 + line_height // 2
             offset = np.clip(offset, 0, scroll_range)
+
             frame_img = Image.fromarray(full_img_np[offset:offset + H, :, :])
             draw_frame = ImageDraw.Draw(frame_img)
 
@@ -86,82 +91,65 @@ if st.button("🎬 Generate Scrolling Video"):
             st.video(tmpfile.name)
             st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
 
-
-# ————— Feature 2: Scrolling + Audio Video —————
-if st.button("🗣️ Generate Synchronized Audio + Highlight Video"):
-    with st.spinner("Creating audio-video..."):
-
-        W, H = 1280, 720
-        side_margin = 60
-
-        font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-        font = ImageFont.truetype(font_path, font_size)
-
-        # Wrap lines
-        max_chars = (W - 2 * side_margin) // (font_size // 2)
-        wrapped_lines = []
-        for line in text.split("\n"):
-            wrapped_lines += textwrap.wrap(line, width=max_chars)
-
-        # Generate full TTS audio
+# ————— Feature 2: Sync Highlight with Audio —————
+if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
+    with st.spinner("Creating synchronized video..."):
         try:
             tts = gTTS(text)
-            audio_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-            tts.save(audio_path)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
+                tts.save(audiofile.name)
+
+                W, H = 1280, 720
+                side_margin = 60
+                font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
+                font = ImageFont.truetype(font_path, font_size)
+
+                wrapped_lines = []
+                for line in text.split("\n"):
+                    wrapped_lines += textwrap.wrap(line, width=(W - 2 * side_margin) // (font_size // 2))
+
+                line_height = font.getbbox("A")[3] + 10
+                total_lines = len(wrapped_lines)
+
+                audio = AudioFileClip(audiofile.name)
+                audio_duration = audio.duration
+                duration_per_line = audio_duration / total_lines
+
+                def make_sync_frame(t):
+                    current_line_index = int(t / duration_per_line)
+                    if current_line_index >= total_lines:
+                        current_line_index = total_lines - 1
+
+                    img = Image.new("RGB", (W, H), color=(0, 0, 0))
+                    draw = ImageDraw.Draw(img)
+                    start_line = max(0, current_line_index - 3)
+                    end_line = min(total_lines, current_line_index + 4)
+                    
+                    y = H // 2 - (line_height * (current_line_index - start_line))
+
+                    for i in range(start_line, end_line):
+                        line = wrapped_lines[i]
+                        w, _ = draw.textsize(line, font=font)
+                        x = max((W - w) // 2, side_margin)
+                        color = "yellow" if i == current_line_index else "white"
+                        draw.text((x, y), line, font=font, fill=color)
+                        y += line_height
+
+                    return np.array(img)
+
+                sync_clip = VideoClip(make_sync_frame, duration=audio_duration)
+                sync_clip = sync_clip.set_audio(audio).set_fps(24)
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+                    sync_clip.write_videofile(tmpfile.name, codec="libx264", audio_codec="aac")
+                    st.success("✅ Sync Video created!")
+                    st.video(tmpfile.name)
+                    st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
+
         except Exception as e:
-            st.error(f"❌ Failed to generate audio: {e}")
-            st.stop()
+            st.error(f"❌ Failed to generate synchronized video: {e}")
 
-        line_height = font.getbbox("A")[3] + 10
-        total_text_height = line_height * len(wrapped_lines)
-        img_height = total_text_height + H
-        y_start = (img_height - total_text_height) // 2
-
-        line_positions = []
-        img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        y = y_start
-        for line in wrapped_lines:
-            w, _ = draw.textsize(line, font=font)
-            x = max((W - w) // 2, side_margin)
-            draw.text((x, y), line, font=font, fill="white")
-            line_positions.append((x, y, line))
-            y += line_height
-
-        full_img_np = np.array(img)
-        total_lines = len(wrapped_lines)
-        duration = total_lines * 0.5
-        scroll_range = img_height - H
-
-        def make_frame(t):
-            current_line_index = int(t / 0.5)
-            current_line_index = min(current_line_index, total_lines - 1)
-            center_y_abs = line_positions[current_line_index][1]
-            offset = center_y_abs - H // 2 + line_height // 2
-            offset = np.clip(offset, 0, scroll_range)
-            frame_img = Image.fromarray(full_img_np[offset:offset + H, :, :])
-            draw_frame = ImageDraw.Draw(frame_img)
-
-            for x, y_abs, line in line_positions:
-                y_rel = y_abs - offset
-                if 0 <= y_rel <= H - line_height:
-                    color = "yellow" if y_abs == center_y_abs else "white"
-                    draw_frame.text((x, y_rel), line, font=font, fill=color)
-
-            return np.array(frame_img)
-
-        video_clip = VideoClip(make_frame, duration=duration + 0.5).set_fps(24)
-        audio_clip = AudioFileClip(audio_path).subclip(0, duration + 0.5)
-        final = video_clip.set_audio(audio_clip)
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as synced_video:
-            final.write_videofile(synced_video.name, codec="libx264", audio_codec="aac")
-            st.success("✅ Synchronized video created!")
-            st.video(synced_video.name)
-            st.download_button("⬇️ Download Synced Video", open(synced_video.name, "rb").read(), file_name="synced_text_audio_video.mp4")
-
-
-# ————— Feature 3: Audio Only —————
+# ————— Feature 3: Text to Audio Only —————
 if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
