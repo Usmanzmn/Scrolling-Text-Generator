@@ -1,5 +1,5 @@
 import streamlit as st
-from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips
+from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -162,7 +162,7 @@ if st.button("🔊 Generate Audio (MP3)"):
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
 
-# ————— Feature 3: Replace Background with Custom Images —————
+# ————— Feature 4: Replace Background While Keeping Text and Audio —————
 st.header("🖼 Replace Background While Keeping Text and Audio")
 
 uploaded_video = st.file_uploader("Upload scrolling video (text on black, with audio)", type=["mp4"])
@@ -175,24 +175,19 @@ if uploaded_video and uploaded_images:
     if st.button("✨ Generate Final Video"):
         with st.spinner("Processing video..."):
 
-            # Save video
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_vid:
                 tmp_vid.write(uploaded_video.read())
                 tmp_vid_path = tmp_vid.name
 
             video = VideoFileClip(tmp_vid_path)
 
-            # ⚫️ Mask out black background so only text remains (bold white)
             masked_video = video.fx(vfx.mask_color, color=[0, 0, 0], thr=20, s=5).set_opacity(1)
 
-            # 🖼 Prepare resized and faded background images
             bg_images = [Image.open(img).resize((video.w, video.h)).convert("RGB") for img in uploaded_images]
             faded_bgs = [(np.array(img) * bg_opacity).astype(np.uint8) for img in bg_images]
 
-            # Repeat background frames over time
             total_duration = video.duration
             num_bgs = len(faded_bgs)
-            cycle_time = bg_duration * num_bgs
 
             def make_bg_frame(t):
                 idx = int(t // bg_duration) % num_bgs
@@ -200,11 +195,9 @@ if uploaded_video and uploaded_images:
 
             background = VideoClip(make_bg_frame, duration=total_duration).set_fps(video.fps)
 
-            # 🎥 Merge final video
             final_video = CompositeVideoClip([background, masked_video.set_position("center")])
             final_video = final_video.set_audio(video.audio)
 
-            # Save to file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as final_out:
                 final_video.write_videofile(final_out.name, codec="libx264", audio=True)
 
