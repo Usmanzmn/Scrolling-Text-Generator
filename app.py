@@ -162,42 +162,49 @@ if st.button("🔊 Generate Audio (MP3)"):
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
 
-# ————— Feature 4: Replace Background with Images —————
-st.header("📽 Replace Background in Existing Video")
-uploaded_video = st.file_uploader("Upload scrolling text video (MP4)", type=["mp4"])
-uploaded_images = st.file_uploader("Upload background images (JPG or PNG)", type=["jpg", "png"], accept_multiple_files=True)
+# ————— Feature 3: Replace Background with Custom Images —————
+import moviepy.video.fx.all as vfx
+from moviepy.editor import VideoFileClip, CompositeVideoClip, ImageClip, VideoClip
+import numpy as np
+from PIL import Image
+
+st.header("🖼 Replace Background While Keeping Scrolling Text")
+
+uploaded_video = st.file_uploader("Upload original scrolling video (text on black background)", type=["mp4"])
+uploaded_images = st.file_uploader("Upload new background image(s)", type=["jpg", "png"], accept_multiple_files=True)
 
 if uploaded_video and uploaded_images:
-    if st.button("🎨 Generate New Video with Replaced Background"):
-        with st.spinner("Processing background replacement..."):
+    if st.button("✨ Generate Video with New Background"):
+        with st.spinner("Processing..."):
 
-            from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
-            import random
-
-            # ✅ Save video file properly
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_vid:
                 tmp_vid.write(uploaded_video.read())
                 tmp_vid_path = tmp_vid.name
 
+            # Load video
             video = VideoFileClip(tmp_vid_path)
-            bg_images = [Image.open(img).resize((1280, 720)) for img in uploaded_images]
+
+            # ✅ Mask out black background (keep only bright text)
+            transparent_text = video.fx(vfx.mask_color, color=[0, 0, 0], thr=20, s=5).set_opacity(1)
+
+            # Load background images
+            bg_images = [Image.open(img).resize((video.w, video.h)) for img in uploaded_images]
             bg_nps = [np.array(img) for img in bg_images]
-            num_images = len(bg_nps)
+            num_bgs = len(bg_nps)
 
-            def generate_video_with_images():
-                def make_frame(t):
-                    bg_index = int(t // 1) % num_images  # change background every second
-                    bg = bg_nps[bg_index]
-                    frame = video.get_frame(t)
-                    frame_rgba = np.dstack((frame, np.full((frame.shape[0], frame.shape[1]), 255, dtype=np.uint8)))
-                    result = Image.alpha_composite(Image.fromarray(bg).convert("RGBA"), Image.fromarray(frame_rgba).convert("RGBA"))
-                    return np.array(result.convert("RGB"))
+            # Background cycling function
+            def make_bg_frame(t):
+                idx = int(t) % num_bgs
+                return bg_nps[idx]
 
-                return VideoClip(make_frame, duration=video.duration).set_fps(video.fps)
+            background = VideoClip(make_bg_frame, duration=video.duration).set_fps(video.fps)
 
-            final_video = generate_video_with_images()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as out_file:
-                final_video.write_videofile(out_file.name, codec="libx264", audio=False)
-                st.success("✅ Video with new background created!")
-                st.video(out_file.name)
-                st.download_button("⬇️ Download Video with New Background", open(out_file.name, "rb").read(), file_name="background_replaced_video.mp4")
+            # Compose new video
+            final = CompositeVideoClip([background, transparent_text])
+
+            # Save final video
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as out_vid:
+                final.write_videofile(out_vid.name, codec="libx264", audio=False)
+                st.success("✅ New background video created!")
+                st.video(out_vid.name)
+                st.download_button("⬇️ Download New Video", open(out_vid.name, "rb").read(), file_name="video_with_new_bg.mp4")
