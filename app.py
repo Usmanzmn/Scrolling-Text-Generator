@@ -1,5 +1,5 @@
 import streamlit as st
-from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip
+from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -22,16 +22,6 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
-# Store generated files to persist after button click
-if 'video_path' not in st.session_state:
-    st.session_state.video_path = None
-
-if 'sync_video_path' not in st.session_state:
-    st.session_state.sync_video_path = None
-
-if 'audio_path' not in st.session_state:
-    st.session_state.audio_path = None
-
 # ————— Feature 1: Scrolling Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video..."):
@@ -40,7 +30,10 @@ if st.button("🎬 Generate Scrolling Video"):
         side_margin = 60
 
         font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-        font = ImageFont.truetype(font_path, font_size)
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except:
+            font = ImageFont.load_default()
 
         max_chars = (W - 2 * side_margin) // (font_size // 2)
         wrapped_lines = []
@@ -94,13 +87,9 @@ if st.button("🎬 Generate Scrolling Video"):
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
             clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-            st.session_state.video_path = tmpfile.name
             st.success("✅ Video created!")
-
-# Show video preview and download
-if st.session_state.video_path:
-    st.video(st.session_state.video_path)
-    st.download_button("⬇️ Download MP4", open(st.session_state.video_path, "rb").read(), file_name="scrolling_highlight_video.mp4")
+            st.video(tmpfile.name)
+            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
 
 # ————— Feature 2: Sync Highlight with Audio —————
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
@@ -153,16 +142,12 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
                     sync_clip.write_videofile(tmpfile.name, codec="libx264", audio_codec="aac")
-                    st.session_state.sync_video_path = tmpfile.name
                     st.success("✅ Sync Video created!")
+                    st.video(tmpfile.name)
+                    st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
 
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
-
-# Show sync video preview and download
-if st.session_state.sync_video_path:
-    st.video(st.session_state.sync_video_path)
-    st.download_button("⬇️ Download Sync Video", open(st.session_state.sync_video_path, "rb").read(), file_name="sync_highlight_video.mp4")
 
 # ————— Feature 3: Text to Audio Only —————
 if st.button("🔊 Generate Audio (MP3)"):
@@ -171,12 +156,46 @@ if st.button("🔊 Generate Audio (MP3)"):
             tts = gTTS(text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
-                st.session_state.audio_path = audiofile.name
                 st.success("✅ Audio ready!")
+                st.audio(audiofile.name)
+                st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
 
-# Show audio preview and download
-if st.session_state.audio_path:
-    st.audio(st.session_state.audio_path)
-    st.download_button("⬇️ Download MP3", open(st.session_state.audio_path, "rb").read(), file_name="text_audio.mp3")
+# ————— Feature 4: Replace Background in Existing Video —————
+st.header("🌄 Replace Background in Existing Video")
+video_file = st.file_uploader("Upload a video (MP4)", type=["mp4"])
+image_files = st.file_uploader("Upload background image(s)", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
+
+if st.button("🎨 Replace Background") and video_file and image_files:
+    with st.spinner("Processing video with new background..."):
+        try:
+            import cv2
+            from moviepy.editor import VideoFileClip
+
+            temp_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+            with open(temp_video_path, "wb") as f:
+                f.write(video_file.read())
+
+            clip = VideoFileClip(temp_video_path)
+            W, H = clip.size
+
+            backgrounds = [Image.open(img).resize((W, H)).convert("RGB") for img in image_files]
+            bg_index = 0
+
+            def frame_with_bg(t):
+                nonlocal bg_index
+                frame = clip.get_frame(t)
+                bg = np.array(backgrounds[int(t * 2) % len(backgrounds)])  # change image every 0.5s
+                return cv2.addWeighted(bg, 0.5, frame, 0.5, 0)
+
+            final_clip = clip.fl_image(lambda frame: frame_with_bg(clip.reader.pos / clip.fps))
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as outvid:
+                final_clip.write_videofile(outvid.name, codec="libx264", audio_codec="aac")
+                st.success("✅ Video with new background ready!")
+                st.video(outvid.name)
+                st.download_button("⬇️ Download Updated Video", open(outvid.name, "rb").read(), file_name="background_replaced_video.mp4")
+
+        except Exception as e:
+            st.error(f"❌ Failed to replace background: {e}")
