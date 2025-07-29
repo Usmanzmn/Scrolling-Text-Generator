@@ -174,16 +174,18 @@ if uploaded_video and uploaded_images:
             from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
             import random
 
-            video = VideoFileClip(uploaded_video.name)
+            # ✅ Save video file properly
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_vid:
+                tmp_vid.write(uploaded_video.read())
+                tmp_vid_path = tmp_vid.name
+
+            video = VideoFileClip(tmp_vid_path)
             bg_images = [Image.open(img).resize((1280, 720)) for img in uploaded_images]
             bg_nps = [np.array(img) for img in bg_images]
             num_images = len(bg_nps)
 
             def generate_video_with_images():
-                bg_index = 0  # Now properly scoped
-
                 def make_frame(t):
-                    nonlocal bg_index
                     bg_index = int(t // 1) % num_images  # change background every second
                     bg = bg_nps[bg_index]
                     frame = video.get_frame(t)
@@ -191,8 +193,7 @@ if uploaded_video and uploaded_images:
                     result = Image.alpha_composite(Image.fromarray(bg).convert("RGBA"), Image.fromarray(frame_rgba).convert("RGBA"))
                     return np.array(result.convert("RGB"))
 
-                new_clip = VideoClip(make_frame, duration=video.duration).set_fps(video.fps)
-                return new_clip
+                return VideoClip(make_frame, duration=video.duration).set_fps(video.fps)
 
             final_video = generate_video_with_images()
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as out_file:
