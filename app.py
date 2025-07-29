@@ -22,6 +22,16 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
+# Store generated files to persist after button click
+if 'video_path' not in st.session_state:
+    st.session_state.video_path = None
+
+if 'sync_video_path' not in st.session_state:
+    st.session_state.sync_video_path = None
+
+if 'audio_path' not in st.session_state:
+    st.session_state.audio_path = None
+
 # ————— Feature 1: Scrolling Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video..."):
@@ -30,10 +40,7 @@ if st.button("🎬 Generate Scrolling Video"):
         side_margin = 60
 
         font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except:
-            font = ImageFont.load_default()
+        font = ImageFont.truetype(font_path, font_size)
 
         max_chars = (W - 2 * side_margin) // (font_size // 2)
         wrapped_lines = []
@@ -87,9 +94,13 @@ if st.button("🎬 Generate Scrolling Video"):
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
             clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
+            st.session_state.video_path = tmpfile.name
             st.success("✅ Video created!")
-            st.video(tmpfile.name)
-            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
+
+# Show video preview and download
+if st.session_state.video_path:
+    st.video(st.session_state.video_path)
+    st.download_button("⬇️ Download MP4", open(st.session_state.video_path, "rb").read(), file_name="scrolling_highlight_video.mp4")
 
 # ————— Feature 2: Sync Highlight with Audio —————
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
@@ -124,7 +135,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                     draw = ImageDraw.Draw(img)
                     start_line = max(0, current_line_index - 3)
                     end_line = min(total_lines, current_line_index + 4)
-                    
+
                     y = H // 2 - (line_height * (current_line_index - start_line))
 
                     for i in range(start_line, end_line):
@@ -142,12 +153,16 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
                     sync_clip.write_videofile(tmpfile.name, codec="libx264", audio_codec="aac")
+                    st.session_state.sync_video_path = tmpfile.name
                     st.success("✅ Sync Video created!")
-                    st.video(tmpfile.name)
-                    st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
 
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
+
+# Show sync video preview and download
+if st.session_state.sync_video_path:
+    st.video(st.session_state.sync_video_path)
+    st.download_button("⬇️ Download Sync Video", open(st.session_state.sync_video_path, "rb").read(), file_name="sync_highlight_video.mp4")
 
 # ————— Feature 3: Text to Audio Only —————
 if st.button("🔊 Generate Audio (MP3)"):
@@ -156,8 +171,12 @@ if st.button("🔊 Generate Audio (MP3)"):
             tts = gTTS(text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
+                st.session_state.audio_path = audiofile.name
                 st.success("✅ Audio ready!")
-                st.audio(audiofile.name)
-                st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
+
+# Show audio preview and download
+if st.session_state.audio_path:
+    st.audio(st.session_state.audio_path)
+    st.download_button("⬇️ Download MP3", open(st.session_state.audio_path, "rb").read(), file_name="text_audio.mp3")
