@@ -7,6 +7,7 @@ import matplotlib.font_manager as fm
 import textwrap
 from gtts import gTTS
 import os
+import time
 
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight + Audio")
@@ -22,74 +23,88 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
+def safe_write_video(clip, tmp_path, fps=24, with_audio=False):
+    try:
+        clip.write_videofile(
+            tmp_path,
+            codec="libx264",
+            audio=with_audio,
+            audio_codec="aac" if with_audio else None,
+            fps=fps,
+            temp_audiofile="temp-audio.m4a",
+            remove_temp=True,
+            threads=4,
+            logger=None
+        )
+        return True
+    except Exception as e:
+        st.error(f"❌ Video generation failed: {e}")
+        return False
+
 # ————— Feature 1: Scrolling Video —————
 if st.button("🎬 Generate Scrolling Video"):
-    with st.spinner("Creating video..."):
-
-        W, H = 1280, 720
-        side_margin = 60
-
-        font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
+    with st.spinner("Creating video... Please wait..."):
         try:
+            W, H = 1280, 720
+            side_margin = 60
+
+            font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
             font = ImageFont.truetype(font_path, font_size)
-        except:
-            font = ImageFont.load_default()
 
-        max_chars = (W - 2 * side_margin) // (font_size // 2)
-        wrapped_lines = []
-        for line in text.split("\n"):
-            wrapped_lines += textwrap.wrap(line, width=max_chars)
+            max_chars = (W - 2 * side_margin) // (font_size // 2)
+            wrapped_lines = []
+            for line in text.split("\n"):
+                wrapped_lines += textwrap.wrap(line, width=max_chars)
 
-        line_height = font.getbbox("A")[3] + 10
-        total_text_height = line_height * len(wrapped_lines)
-        img_height = total_text_height + H
-        y_start = (img_height - total_text_height) // 2
+            line_height = font.getbbox("A")[3] + 10
+            total_text_height = line_height * len(wrapped_lines)
+            img_height = total_text_height + H
+            y_start = (img_height - total_text_height) // 2
 
-        line_positions = []
-        img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        y = y_start
-        for line in wrapped_lines:
-            w, _ = draw.textsize(line, font=font)
-            x = max((W - w) // 2, side_margin)
-            draw.text((x, y), line, font=font, fill="white")
-            line_positions.append((x, y, line))
-            y += line_height
+            line_positions = []
+            img = Image.new("RGB", (W, img_height), color=(0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            y = y_start
+            for line in wrapped_lines:
+                w, _ = draw.textsize(line, font=font)
+                x = max((W - w) // 2, side_margin)
+                draw.text((x, y), line, font=font, fill="white")
+                line_positions.append((x, y, line))
+                y += line_height
 
-        full_img_np = np.array(img)
-        total_lines = len(wrapped_lines)
-        duration = total_lines * 0.5
-        scroll_range = img_height - H
+            full_img_np = np.array(img)
+            total_lines = len(wrapped_lines)
+            duration = total_lines * 0.5
+            scroll_range = img_height - H
 
-        def make_frame(t):
-            current_line_index = int(t / 0.5)
-            if current_line_index >= total_lines:
-                current_line_index = total_lines - 1
+            def make_frame(t):
+                current_line_index = int(t / 0.5)
+                current_line_index = min(current_line_index, total_lines - 1)
+                center_y_abs = line_positions[current_line_index][1]
+                offset = np.clip(center_y_abs - H // 2 + line_height // 2, 0, scroll_range)
+                frame_img = Image.fromarray(full_img_np[offset:offset + H, :, :])
+                draw_frame = ImageDraw.Draw(frame_img)
 
-            center_y_abs = line_positions[current_line_index][1]
-            offset = center_y_abs - H // 2 + line_height // 2
-            offset = np.clip(offset, 0, scroll_range)
+                if highlight_lines:
+                    for x, y_abs, line in line_positions:
+                        y_rel = y_abs - offset
+                        if 0 <= y_rel <= H - line_height:
+                            color = "yellow" if y_abs == center_y_abs else "white"
+                            draw_frame.text((x, y_rel), line, font=font, fill=color)
 
-            frame_img = Image.fromarray(full_img_np[offset:offset + H, :, :])
-            draw_frame = ImageDraw.Draw(frame_img)
+                return np.array(frame_img)
 
-            if highlight_lines:
-                for x, y_abs, line in line_positions:
-                    y_rel = y_abs - offset
-                    if 0 <= y_rel <= H - line_height:
-                        color = "yellow" if y_abs == center_y_abs else "white"
-                        draw_frame.text((x, y_rel), line, font=font, fill=color)
+            clip = VideoClip(make_frame, duration=duration + 0.5)
+            clip = clip.set_fps(24)
 
-            return np.array(frame_img)
-
-        clip = VideoClip(make_frame, duration=duration + 0.5)
-        clip = clip.set_fps(24)
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-            clip.write_videofile(tmpfile.name, codec="libx264", audio=False)
-            st.success("✅ Video created!")
-            st.video(tmpfile.name)
-            st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
+                success = safe_write_video(clip, tmpfile.name, with_audio=False)
+                if success:
+                    st.success("✅ Video created!")
+                    st.video(tmpfile.name)
+                    st.download_button("⬇️ Download MP4", open(tmpfile.name, "rb").read(), file_name="scrolling_highlight_video.mp4")
+        except Exception as e:
+            st.error(f"⚠️ Error during video generation: {e}")
 
 # ————— Feature 2: Sync Highlight with Audio —————
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
@@ -117,8 +132,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 def make_sync_frame(t):
                     current_line_index = int(t / duration_per_line)
-                    if current_line_index >= total_lines:
-                        current_line_index = total_lines - 1
+                    current_line_index = min(current_line_index, total_lines - 1)
 
                     img = Image.new("RGB", (W, H), color=(0, 0, 0))
                     draw = ImageDraw.Draw(img)
@@ -126,7 +140,6 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                     end_line = min(total_lines, current_line_index + 4)
 
                     y = H // 2 - (line_height * (current_line_index - start_line))
-
                     for i in range(start_line, end_line):
                         line = wrapped_lines[i]
                         w, _ = draw.textsize(line, font=font)
@@ -141,11 +154,11 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 sync_clip = sync_clip.set_audio(audio).set_fps(24)
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-                    sync_clip.write_videofile(tmpfile.name, codec="libx264", audio_codec="aac")
-                    st.success("✅ Sync Video created!")
-                    st.video(tmpfile.name)
-                    st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
-
+                    success = safe_write_video(sync_clip, tmpfile.name, with_audio=True)
+                    if success:
+                        st.success("✅ Sync Video created!")
+                        st.video(tmpfile.name)
+                        st.download_button("⬇️ Download Sync Video", open(tmpfile.name, "rb").read(), file_name="sync_highlight_video.mp4")
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
@@ -161,5 +174,3 @@ if st.button("🔊 Generate Audio (MP3)"):
                 st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
-
-
