@@ -162,45 +162,4 @@ if st.button("🔊 Generate Audio (MP3)"):
         except Exception as e:
             st.error(f"❌ Failed to generate audio: {e}")
 
-# ————— Feature 4: Replace Background While Keeping Text and Audio —————
-st.header("🖼 Replace Background While Keeping Text and Audio")
 
-uploaded_video = st.file_uploader("Upload scrolling video (text on black, with audio)", type=["mp4"])
-uploaded_images = st.file_uploader("Upload new background image(s)", type=["jpg", "png"], accept_multiple_files=True)
-
-bg_duration = st.number_input("⏱ Seconds per background image", min_value=1.0, max_value=20.0, value=5.0, step=0.5)
-bg_opacity = st.slider("🌫 Background Image Visibility (Opacity)", 0.0, 1.0, 0.6)
-
-if uploaded_video and uploaded_images:
-    if st.button("✨ Generate Final Video"):
-        with st.spinner("Processing video..."):
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_vid:
-                tmp_vid.write(uploaded_video.read())
-                tmp_vid_path = tmp_vid.name
-
-            video = VideoFileClip(tmp_vid_path)
-
-            masked_video = video.fx(vfx.mask_color, color=[0, 0, 0], thr=20, s=5).set_opacity(1)
-
-            bg_images = [Image.open(img).resize((video.w, video.h)).convert("RGB") for img in uploaded_images]
-            faded_bgs = [(np.array(img) * bg_opacity).astype(np.uint8) for img in bg_images]
-
-            total_duration = video.duration
-            num_bgs = len(faded_bgs)
-
-            def make_bg_frame(t):
-                idx = int(t // bg_duration) % num_bgs
-                return faded_bgs[idx]
-
-            background = VideoClip(make_bg_frame, duration=total_duration).set_fps(video.fps)
-
-            final_video = CompositeVideoClip([background, masked_video.set_position("center")])
-            final_video = final_video.set_audio(video.audio)
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as final_out:
-                final_video.write_videofile(final_out.name, codec="libx264", audio=True)
-
-                st.success("✅ Done! Final video with audio and new backgrounds.")
-                st.video(final_out.name)
-                st.download_button("⬇️ Download Final Video", open(final_out.name, "rb").read(), file_name="text_with_bg_and_audio.mp4")
