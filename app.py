@@ -1,5 +1,6 @@
+# Updated app.py
 import streamlit as st
-from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
+from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -41,13 +42,19 @@ def safe_write_video(clip, tmp_path, fps=24, with_audio=False):
         st.error(f"❌ Video generation failed: {e}")
         return False
 
+def draw_bold_text(draw, position, text, font, color):
+    # Draw bold by overlaying offset texts
+    x, y = position
+    for dx in [-1, 0, 1]:
+        for dy in [-1, 0, 1]:
+            draw.text((x+dx, y+dy), text, font=font, fill=color)
+
 # ————— Feature 1: Scrolling Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video... Please wait..."):
         try:
             W, H = 1280, 720
             side_margin = 60
-
             font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
             font = ImageFont.truetype(font_path, font_size)
 
@@ -68,7 +75,7 @@ if st.button("🎬 Generate Scrolling Video"):
             for line in wrapped_lines:
                 w, _ = draw.textsize(line, font=font)
                 x = max((W - w) // 2, side_margin)
-                draw.text((x, y), line, font=font, fill="white")
+                draw_bold_text(draw, (x, y), line, font, "white")
                 line_positions.append((x, y, line))
                 y += line_height
 
@@ -90,12 +97,11 @@ if st.button("🎬 Generate Scrolling Video"):
                         y_rel = y_abs - offset
                         if 0 <= y_rel <= H - line_height:
                             color = "yellow" if y_abs == center_y_abs else "white"
-                            draw_frame.text((x, y_rel), line, font=font, fill=color)
+                            draw_bold_text(draw_frame, (x, y_rel), line, font, color)
 
                 return np.array(frame_img)
 
-            clip = VideoClip(make_frame, duration=duration + 0.5)
-            clip = clip.set_fps(24)
+            clip = VideoClip(make_frame, duration=duration + 0.5).set_fps(24)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
                 success = safe_write_video(clip, tmpfile.name, with_audio=False)
@@ -110,6 +116,7 @@ if st.button("🎬 Generate Scrolling Video"):
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
     with st.spinner("Creating synchronized video..."):
         try:
+            # Save audio
             tts = gTTS(text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
@@ -128,14 +135,25 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 audio = AudioFileClip(audiofile.name)
                 audio_duration = audio.duration
-                duration_per_line = audio_duration / total_lines
+
+                # Duration per line based on word count
+                words = text.split()
+                total_words = len(words)
+                line_word_counts = [len(line.split()) for line in wrapped_lines]
+                durations = [max(0.3, (count / total_words) * audio_duration) for count in line_word_counts]
+                cumulative_durations = [sum(durations[:i+1]) for i in range(len(durations))]
 
                 def make_sync_frame(t):
-                    current_line_index = int(t / duration_per_line)
-                    current_line_index = min(current_line_index, total_lines - 1)
+                    for i, end_time in enumerate(cumulative_durations):
+                        if t < end_time:
+                            current_line_index = i
+                            break
+                    else:
+                        current_line_index = total_lines - 1
 
                     img = Image.new("RGB", (W, H), color=(0, 0, 0))
                     draw = ImageDraw.Draw(img)
+
                     start_line = max(0, current_line_index - 3)
                     end_line = min(total_lines, current_line_index + 4)
 
@@ -145,7 +163,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                         w, _ = draw.textsize(line, font=font)
                         x = max((W - w) // 2, side_margin)
                         color = "yellow" if i == current_line_index else "white"
-                        draw.text((x, y), line, font=font, fill=color)
+                        draw_bold_text(draw, (x, y), line, font, color)
                         y += line_height
 
                     return np.array(img)
