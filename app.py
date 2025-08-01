@@ -1,6 +1,7 @@
-# Updated app.py
+# ---------------------------- app.py ----------------------------
+
 import streamlit as st
-from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx
+from moviepy.editor import VideoClip, AudioFileClip, ImageClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -8,7 +9,6 @@ import matplotlib.font_manager as fm
 import textwrap
 from gtts import gTTS
 import os
-import time
 
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight + Audio")
@@ -42,14 +42,12 @@ def safe_write_video(clip, tmp_path, fps=24, with_audio=False):
         st.error(f"❌ Video generation failed: {e}")
         return False
 
-def draw_bold_text(draw, position, text, font, color):
-    # Draw bold by overlaying offset texts
-    x, y = position
-    for dx in [-1, 0, 1]:
-        for dy in [-1, 0, 1]:
-            draw.text((x+dx, y+dy), text, font=font, fill=color)
+def draw_text(draw, x, y, text, font, fill, shadow=True):
+    if shadow:
+        draw.text((x+2, y+2), text, font=font, fill="black")
+    draw.text((x, y), text, font=font, fill=fill, stroke_width=1, stroke_fill="black")
 
-# ————— Feature 1: Scrolling Video —————
+# ——— Feature 1: Scrolling Video ———
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video... Please wait..."):
         try:
@@ -75,17 +73,17 @@ if st.button("🎬 Generate Scrolling Video"):
             for line in wrapped_lines:
                 w, _ = draw.textsize(line, font=font)
                 x = max((W - w) // 2, side_margin)
-                draw_bold_text(draw, (x, y), line, font, "white")
+                draw_text(draw, x, y, line, font, "white")
                 line_positions.append((x, y, line))
                 y += line_height
 
             full_img_np = np.array(img)
             total_lines = len(wrapped_lines)
-            duration = total_lines * 0.5
+            duration = total_lines * 0.6
             scroll_range = img_height - H
 
             def make_frame(t):
-                current_line_index = int(t / 0.5)
+                current_line_index = int(t / 0.6)
                 current_line_index = min(current_line_index, total_lines - 1)
                 center_y_abs = line_positions[current_line_index][1]
                 offset = np.clip(center_y_abs - H // 2 + line_height // 2, 0, scroll_range)
@@ -97,11 +95,12 @@ if st.button("🎬 Generate Scrolling Video"):
                         y_rel = y_abs - offset
                         if 0 <= y_rel <= H - line_height:
                             color = "yellow" if y_abs == center_y_abs else "white"
-                            draw_bold_text(draw_frame, (x, y_rel), line, font, color)
+                            draw_text(draw_frame, x, y_rel, line, font, color)
 
                 return np.array(frame_img)
 
-            clip = VideoClip(make_frame, duration=duration + 0.5).set_fps(24)
+            clip = VideoClip(make_frame, duration=duration + 0.5)
+            clip = clip.set_fps(24)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
                 success = safe_write_video(clip, tmpfile.name, with_audio=False)
@@ -112,11 +111,10 @@ if st.button("🎬 Generate Scrolling Video"):
         except Exception as e:
             st.error(f"⚠️ Error during video generation: {e}")
 
-# ————— Feature 2: Sync Highlight with Audio —————
+# ——— Feature 2: Sync Highlight with Audio ———
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
     with st.spinner("Creating synchronized video..."):
         try:
-            # Save audio
             tts = gTTS(text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
@@ -135,25 +133,14 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 audio = AudioFileClip(audiofile.name)
                 audio_duration = audio.duration
-
-                # Duration per line based on word count
-                words = text.split()
-                total_words = len(words)
-                line_word_counts = [len(line.split()) for line in wrapped_lines]
-                durations = [max(0.3, (count / total_words) * audio_duration) for count in line_word_counts]
-                cumulative_durations = [sum(durations[:i+1]) for i in range(len(durations))]
+                duration_per_line = audio_duration / total_lines
 
                 def make_sync_frame(t):
-                    for i, end_time in enumerate(cumulative_durations):
-                        if t < end_time:
-                            current_line_index = i
-                            break
-                    else:
-                        current_line_index = total_lines - 1
+                    current_line_index = int(t / duration_per_line)
+                    current_line_index = min(current_line_index, total_lines - 1)
 
                     img = Image.new("RGB", (W, H), color=(0, 0, 0))
                     draw = ImageDraw.Draw(img)
-
                     start_line = max(0, current_line_index - 3)
                     end_line = min(total_lines, current_line_index + 4)
 
@@ -163,12 +150,12 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                         w, _ = draw.textsize(line, font=font)
                         x = max((W - w) // 2, side_margin)
                         color = "yellow" if i == current_line_index else "white"
-                        draw_bold_text(draw, (x, y), line, font, color)
+                        draw_text(draw, x, y, line, font, color)
                         y += line_height
 
                     return np.array(img)
 
-                sync_clip = VideoClip(make_sync_frame, duration=audio_duration)
+                sync_clip = VideoClip(make_sync_frame, duration=audio_duration + 0.2)
                 sync_clip = sync_clip.set_audio(audio).set_fps(24)
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
@@ -180,7 +167,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
-# ————— Feature 3: Text to Audio Only —————
+# ——— Feature 3: Audio Only ———
 if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
