@@ -167,14 +167,29 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
 # ————— Feature 3: Text to Audio Only —————
-elif voice_option == "Custom MP3 Voice":
-    uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
-            tmpfile.write(uploaded_file.read())
-            tmpfile_path = tmpfile.name
-        st.success("✅ Custom MP3 voice ready!")
-        st.audio(tmpfile_path)
-        st.download_button("⬇️ Download MP3", open(tmpfile_path, "rb").read(), file_name="custom_voice_audio.mp3")
-    else:
-        st.warning("⚠️ Please upload an MP3 file.")
+if st.button("🔊 Generate Audio (MP3)"):
+    voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Custom MP3 Voice"])
+
+    with st.spinner("Generating audio..."):
+        try:
+            if voice_option == "Default":
+                tts = gTTS(text)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
+                    tts.save(audiofile.name)
+                    st.success("✅ Audio ready!")
+                    st.audio(audiofile.name)
+                    st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
+
+            elif voice_option == "Custom MP3 Voice":
+                uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
+                if uploaded_file is not None:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
+                        tmpfile.write(uploaded_file.read())
+                        tmpfile_path = tmpfile.name
+                    st.success("✅ Custom MP3 voice ready!")
+                    st.audio(tmpfile_path)
+                    st.download_button("⬇️ Download MP3", open(tmpfile_path, "rb").read(), file_name="custom_voice_audio.mp3")
+                else:
+                    st.warning("⚠️ Please upload an MP3 file.")
+        except Exception as e:
+            st.error(f"❌ Failed to generate audio: {e}")
