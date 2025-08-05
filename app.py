@@ -1,3 +1,4 @@
+# --- Number and Year Conversion Logic ---
 import inflect
 import re
 p = inflect.engine()
@@ -5,20 +6,16 @@ p = inflect.engine()
 def convert_year_to_words(text):
     # Matches 4-digit years from 1900–2099
     year_pattern = r'\b(19\d{2}|20\d{2})\b'
-    
+
     def year_to_words(match):
         year = int(match.group())
-        if 1900 <= year <= 1999:
-            first = year // 100
-            second = year % 100
-            return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
-        elif 2000 <= year <= 2099:
+        if 1900 <= year <= 1999 or 2000 <= year <= 2099:
             first = year // 100
             second = year % 100
             return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
         else:
             return p.number_to_words(year)
-    
+
     return re.sub(year_pattern, year_to_words, text)
 
 def convert_numbers_to_words(text):
@@ -35,8 +32,8 @@ def convert_numbers_to_words(text):
             return number
     return re.sub(r'\b\d+\b', replace_number, text)
 
-# ---- The rest of your app.py code remains unchanged below ----
 
+# --- Streamlit and Video Logic ---
 import streamlit as st
 from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
 from PIL import Image, ImageDraw, ImageFont
