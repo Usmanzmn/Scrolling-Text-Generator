@@ -1,21 +1,25 @@
-# --- Number and Year Conversion Logic ---
+updated_code = """
 import inflect
 import re
 p = inflect.engine()
 
 def convert_year_to_words(text):
     # Matches 4-digit years from 1900–2099
-    year_pattern = r'\b(19\d{2}|20\d{2})\b'
-
+    year_pattern = r'\\b(19\\d{2}|20\\d{2})\\b'
+    
     def year_to_words(match):
         year = int(match.group())
-        if 1900 <= year <= 1999 or 2000 <= year <= 2099:
+        if 1900 <= year <= 1999:
+            first = year // 100
+            second = year % 100
+            return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
+        elif 2000 <= year <= 2099:
             first = year // 100
             second = year % 100
             return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
         else:
             return p.number_to_words(year)
-
+    
     return re.sub(year_pattern, year_to_words, text)
 
 def convert_numbers_to_words(text):
@@ -30,10 +34,10 @@ def convert_numbers_to_words(text):
                 return p.number_to_words(number_int)
         except:
             return number
-    return re.sub(r'\b\d+\b', replace_number, text)
+    return re.sub(r'\\b\\d+\\b', replace_number, text)
 
+# ---- The rest of your app.py code remains unchanged below ----
 
-# --- Streamlit and Video Logic ---
 import streamlit as st
 from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
 from PIL import Image, ImageDraw, ImageFont
@@ -92,7 +96,7 @@ if st.button("🎬 Generate Scrolling Video"):
 
             max_chars = (W - 2 * side_margin) // (font_size // 2)
             wrapped_lines = []
-            for line in processed_text.split("\n"):
+            for line in processed_text.split("\\n"):
                 wrapped_lines += textwrap.wrap(line, width=max_chars)
 
             line_height = font.getbbox("A")[3] + 10
@@ -159,7 +163,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 font = ImageFont.truetype(font_path, font_size)
 
                 wrapped_lines = []
-                for line in processed_text.split("\n"):
+                for line in processed_text.split("\\n"):
                     wrapped_lines += textwrap.wrap(line, width=(W - 2 * side_margin) // (font_size // 2))
 
                 line_height = font.getbbox("A")[3] + 10
@@ -182,7 +186,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                         w, _ = draw.textsize(line, font=font)
                         x = max((W - w) // 2, side_margin)
                         color = "yellow" if i == current_line_index else "white"
-                        draw_text_with_outline(draw, (x, y), line, font, fill=color)
+                        draw_text_with_outline(draw, (x, y), line, font=font, fill=color)
                         y += line_height
 
                     return np.array(img)
@@ -226,3 +230,11 @@ if st.button("🔊 Generate Audio (MP3)"):
                 st.warning("⚠️ Please upload a valid MP3 file.")
         except Exception as e:
             st.error(f"❌ Audio generation failed: {e}")
+"""
+
+# Save it to a file so the user can download it if they want
+with open("/mnt/data/updated_app.py", "w") as f:
+    f.write(updated_code)
+
+"/mnt/data/updated_app.py"
+
