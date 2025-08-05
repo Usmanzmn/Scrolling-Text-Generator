@@ -188,8 +188,6 @@ if st.button("🔊 Generate Audio (MP3)"):
                         tmpfile_path = tmpfile.name
                     st.success("✅ Custom MP3 voice ready!")
                     st.audio(tmpfile_path)
-                    st.download_button("⬇️ Download MP3", open(tmpfile_path, "rb").read(), file_name="custom_voice_audio.mp3")
-                else:
-                    st.warning("⚠️ Please upload an MP3 file.")
+                    st.download_button("⬇️ Download Custom Voice", open(tmpfile_path, "rb").read(), file_name="custom_voice.mp3")
         except Exception as e:
-            st.error(f"❌ Failed to generate audio: {e}")
+            st.error(f"❌ Audio generation failed: {e}")
