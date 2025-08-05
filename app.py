@@ -1,5 +1,13 @@
 import streamlit as st
-from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
+from moviepy.editor import (
+    VideoClip,
+    AudioFileClip,
+    CompositeVideoClip,
+    ImageClip,
+    concatenate_videoclips,
+    vfx,
+    VideoFileClip,
+)
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -7,7 +15,6 @@ import matplotlib.font_manager as fm
 import textwrap
 from gtts import gTTS
 import os
-import time
 
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight + Audio")
@@ -51,7 +58,6 @@ if st.button("🎬 Generate Scrolling Video"):
         try:
             W, H = 1280, 720
             side_margin = 60
-
             font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
             font = ImageFont.truetype(font_path, font_size)
 
@@ -117,6 +123,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
             tts = gTTS(text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
+                audio = AudioFileClip(audiofile.name)
 
                 W, H = 1280, 720
                 side_margin = 60
@@ -130,7 +137,6 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 line_height = font.getbbox("A")[3] + 10
                 total_lines = len(wrapped_lines)
 
-                audio = AudioFileClip(audiofile.name)
                 audio_duration = audio.duration
                 duration_per_line = audio_duration / total_lines
 
@@ -167,9 +173,8 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
 # ————— Feature 3: Text to Audio Only —————
+voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Custom MP3 Voice"])
 if st.button("🔊 Generate Audio (MP3)"):
-    voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Custom MP3 Voice"])
-
     with st.spinner("Generating audio..."):
         try:
             if voice_option == "Default":
@@ -179,8 +184,7 @@ if st.button("🔊 Generate Audio (MP3)"):
                     st.success("✅ Audio ready!")
                     st.audio(audiofile.name)
                     st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
-
-            elif voice_option == "Custom MP3 Voice":
+            else:
                 uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
                 if uploaded_file is not None:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
@@ -188,6 +192,6 @@ if st.button("🔊 Generate Audio (MP3)"):
                         tmpfile_path = tmpfile.name
                     st.success("✅ Custom MP3 voice ready!")
                     st.audio(tmpfile_path)
-                    st.download_button("⬇️ Download Custom Voice", open(tmpfile_path, "rb").read(), file_name="custom_voice.mp3")
+                    st.download_button("⬇️ Download Custom MP3", open(tmpfile_path, "rb").read(), file_name="custom_audio.mp3")
         except Exception as e:
-            st.error(f"❌ Audio generation failed: {e}")
+            st.error(f"❌ Failed to generate audio: {e}")
