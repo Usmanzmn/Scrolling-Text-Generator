@@ -2,29 +2,43 @@ import inflect
 import re
 p = inflect.engine()
 
+def convert_year_to_words(text):
+    # Matches 4-digit years from 1900–2099
+    year_pattern = r'\b(19\d{2}|20\d{2})\b'
+    
+    def year_to_words(match):
+        year = int(match.group())
+        if 1900 <= year <= 1999:
+            first = year // 100
+            second = year % 100
+            return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
+        elif 2000 <= year <= 2099:
+            first = year // 100
+            second = year % 100
+            return f"{p.number_to_words(first * 100)} {p.number_to_words(second)}"
+        else:
+            return p.number_to_words(year)
+    
+    return re.sub(year_pattern, year_to_words, text)
+
 def convert_numbers_to_words(text):
+    text = convert_year_to_words(text)
     def replace_number(match):
         number = match.group(0)
         try:
             number_int = int(number)
             if number_int >= 1000:
-                return p.number_to_words(number_int, andword="", group=1)  # e.g. 2025 → "two thousand twenty five"
+                return p.number_to_words(number_int, andword="", group=1)
             else:
-                return p.number_to_words(number_int)  # e.g. 33 → "thirty three"
+                return p.number_to_words(number_int)
         except:
             return number
     return re.sub(r'\b\d+\b', replace_number, text)
 
+# ---- The rest of your app.py code remains unchanged below ----
+
 import streamlit as st
-from moviepy.editor import (
-    VideoClip,
-    AudioFileClip,
-    CompositeVideoClip,
-    ImageClip,
-    concatenate_videoclips,
-    vfx,
-    VideoFileClip,
-)
+from moviepy.editor import VideoClip, AudioFileClip, CompositeVideoClip, ImageClip, concatenate_videoclips, vfx, VideoFileClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 import tempfile
@@ -33,11 +47,9 @@ import textwrap
 from gtts import gTTS
 import os
 
-# UI Config
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight + Audio")
 
-# Input Fields
 text = st.text_area("Paste your text here", height=400)
 font_size = st.slider("Font size", 20, 60, 40)
 highlight_lines = st.checkbox("✅ Highlight center line while reading", value=True)
@@ -49,7 +61,6 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
-# Helper Functions
 def draw_text_with_outline(draw, position, line, font, fill, stroke_width=2):
     x, y = position
     draw.text((x, y), line, font=font, fill=fill, stroke_width=stroke_width, stroke_fill="black")
@@ -72,10 +83,11 @@ def safe_write_video(clip, tmp_path, fps=12, with_audio=False):
         st.error(f"❌ Video generation failed: {e}")
         return False
 
-# ————— Feature 1: Scrolling Text Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video... Please wait..."):
         try:
+            processed_text = convert_numbers_to_words(text)
+
             W, H = 1280, 720
             side_margin = 60
             font_path = fm.findfont(fm.FontProperties(family='DejaVu Sans'))
@@ -83,7 +95,7 @@ if st.button("🎬 Generate Scrolling Video"):
 
             max_chars = (W - 2 * side_margin) // (font_size // 2)
             wrapped_lines = []
-            for line in text.split("\n"):
+            for line in processed_text.split("\n"):
                 wrapped_lines += textwrap.wrap(line, width=max_chars)
 
             line_height = font.getbbox("A")[3] + 10
@@ -135,11 +147,11 @@ if st.button("🎬 Generate Scrolling Video"):
         except Exception as e:
             st.error(f"⚠️ Error during video generation: {e}")
 
-# ————— Feature 2: Sync Highlight with Audio —————
 if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
     with st.spinner("Creating synchronized video..."):
         try:
-            tts = gTTS(text)
+            processed_text = convert_numbers_to_words(text)
+            tts = gTTS(processed_text)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                 tts.save(audiofile.name)
                 audio = AudioFileClip(audiofile.name)
@@ -150,7 +162,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 font = ImageFont.truetype(font_path, font_size)
 
                 wrapped_lines = []
-                for line in text.split("\n"):
+                for line in processed_text.split("\n"):
                     wrapped_lines += textwrap.wrap(line, width=(W - 2 * side_margin) // (font_size // 2))
 
                 line_height = font.getbbox("A")[3] + 10
@@ -190,9 +202,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
         except Exception as e:
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
-# ————— Feature 3: Text to Audio Only —————
 voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Upload MP3 File"])
-
 uploaded_file = None
 if voice_option == "Upload MP3 File":
     uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
@@ -200,8 +210,9 @@ if voice_option == "Upload MP3 File":
 if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
+            processed_text = convert_numbers_to_words(text)
             if voice_option == "Default":
-                tts = gTTS(text)
+                tts = gTTS(processed_text)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audiofile:
                     tts.save(audiofile.name)
                     st.success("✅ Audio ready!")
