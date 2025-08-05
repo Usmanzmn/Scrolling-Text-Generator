@@ -1,3 +1,20 @@
+import inflect
+import re
+p = inflect.engine()
+
+def convert_numbers_to_words(text):
+    def replace_number(match):
+        number = match.group(0)
+        try:
+            number_int = int(number)
+            if number_int >= 1000:
+                return p.number_to_words(number_int, andword="", group=1)  # e.g. 2025 → "two thousand twenty five"
+            else:
+                return p.number_to_words(number_int)  # e.g. 33 → "thirty three"
+        except:
+            return number
+    return re.sub(r'\b\d+\b', replace_number, text)
+
 import streamlit as st
 from moviepy.editor import (
     VideoClip,
