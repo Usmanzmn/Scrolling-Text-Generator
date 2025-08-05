@@ -16,9 +16,11 @@ import textwrap
 from gtts import gTTS
 import os
 
+# UI Config
 st.set_page_config(layout="centered")
 st.title("📜 Scrolling Text Video with Center Highlight + Audio")
 
+# Input Fields
 text = st.text_area("Paste your text here", height=400)
 font_size = st.slider("Font size", 20, 60, 40)
 highlight_lines = st.checkbox("✅ Highlight center line while reading", value=True)
@@ -30,6 +32,7 @@ if len(text) > MAX_CHARS:
 
 st.caption(f"{len(text)}/{MAX_CHARS} characters")
 
+# Helper Functions
 def draw_text_with_outline(draw, position, line, font, fill, stroke_width=2):
     x, y = position
     draw.text((x, y), line, font=font, fill=fill, stroke_width=stroke_width, stroke_fill="black")
@@ -52,7 +55,7 @@ def safe_write_video(clip, tmp_path, fps=12, with_audio=False):
         st.error(f"❌ Video generation failed: {e}")
         return False
 
-# ————— Feature 1: Scrolling Video —————
+# ————— Feature 1: Scrolling Text Video —————
 if st.button("🎬 Generate Scrolling Video"):
     with st.spinner("Creating video... Please wait..."):
         try:
@@ -104,11 +107,10 @@ if st.button("🎬 Generate Scrolling Video"):
 
                 return np.array(frame_img)
 
-            clip = VideoClip(make_frame, duration=duration + 0.5)
-            clip = clip.set_fps(12)
+            clip = VideoClip(make_frame, duration=duration + 0.5).set_fps(12)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-                success = safe_write_video(clip, tmpfile.name, with_audio=False, fps=12)
+                success = safe_write_video(clip, tmpfile.name, with_audio=False)
                 if success:
                     st.success("✅ Video created!")
                     st.video(tmpfile.name)
@@ -136,7 +138,6 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
 
                 line_height = font.getbbox("A")[3] + 10
                 total_lines = len(wrapped_lines)
-
                 audio_duration = audio.duration
                 duration_per_line = audio_duration / total_lines
 
@@ -164,7 +165,7 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
                 sync_clip = sync_clip.set_audio(audio).set_fps(12)
 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmpfile:
-                    success = safe_write_video(sync_clip, tmpfile.name, with_audio=True, fps=12)
+                    success = safe_write_video(sync_clip, tmpfile.name, with_audio=True)
                     if success:
                         st.success("✅ Sync Video created!")
                         st.video(tmpfile.name)
@@ -173,7 +174,12 @@ if st.button("🟡 Generate Sync Video (Highlight While Speaking)"):
             st.error(f"❌ Failed to generate synchronized video: {e}")
 
 # ————— Feature 3: Text to Audio Only —————
-voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Custom MP3 Voice"])
+voice_option = st.selectbox("🎙️ Choose Voice", ["Default", "Upload MP3 File"])
+
+uploaded_file = None
+if voice_option == "Upload MP3 File":
+    uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
+
 if st.button("🔊 Generate Audio (MP3)"):
     with st.spinner("Generating audio..."):
         try:
@@ -184,14 +190,14 @@ if st.button("🔊 Generate Audio (MP3)"):
                     st.success("✅ Audio ready!")
                     st.audio(audiofile.name)
                     st.download_button("⬇️ Download MP3", open(audiofile.name, "rb").read(), file_name="text_audio.mp3")
+            elif uploaded_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
+                    tmpfile.write(uploaded_file.read())
+                    tmpfile_path = tmpfile.name
+                st.success("✅ Custom MP3 voice ready!")
+                st.audio(tmpfile_path)
+                st.download_button("⬇️ Download Custom MP3", open(tmpfile_path, "rb").read(), file_name="custom_audio.mp3")
             else:
-                uploaded_file = st.file_uploader("📤 Upload your MP3 file", type=["mp3"])
-                if uploaded_file is not None:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
-                        tmpfile.write(uploaded_file.read())
-                        tmpfile_path = tmpfile.name
-                    st.success("✅ Custom MP3 voice ready!")
-                    st.audio(tmpfile_path)
-                    st.download_button("⬇️ Download Custom MP3", open(tmpfile_path, "rb").read(), file_name="custom_audio.mp3")
+                st.warning("⚠️ Please upload a valid MP3 file.")
         except Exception as e:
-            st.error(f"❌ Failed to generate audio: {e}")
+            st.error(f"❌ Audio generation failed: {e}")
